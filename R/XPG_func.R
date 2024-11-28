@@ -21,8 +21,8 @@ lapply2 <- function (X, FUN, ...)  {
 #' @return The average score per cell type and average percentage per each cell  
 #' @export
 nnfunc = function(s, graph, label, cat){
-  print(s)
   nn = s@graphs[[graph]]
+  print(nn)
   tmpll = data.frame(lapply2(levels(s@meta.data[,label]), function(x){
     cellid = rownames(s@meta.data[s@meta.data[,label]==x,])
     return(rowSums(nn[,colnames(nn) %in% cellid]))
