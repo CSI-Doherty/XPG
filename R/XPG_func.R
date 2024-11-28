@@ -3,7 +3,7 @@
 #' Calculating Percentage Neighbourhood Connection 
 #' @return The average score per cell type and average percentage per each cell  
 #' @export
-nnfunc = function(s, graph, label, cat){
+nnfunc = function(s, graph, label, k, cat){
   l = as.character(s@meta.data[,label])
   nn = as(s@graphs[[graph]], 'matrix')
   nn = t(rowsum(t(nn), l))
@@ -22,7 +22,7 @@ insider = function(gi = gi, seu = seu, graph = graph, sp = sp, arr=arr, ct = ct,
   tmpseu <- seu[Features(seu) %in% gene,]
   tmpseu <- RunPCA(tmpseu, npcs = 5, features = gene, verbose = F)
   tmpseu <- FindNeighbors(tmpseu, reduction = "pca", k.param = k, dims = 1:5, compute.SNN = TRUE, verbose = F)
-  tmpseu_nn = nnfunc(tmpseu, graph, ct, cat)
+  tmpseu_nn = nnfunc(tmpseu, graph, ct, k, cat)
   return(tmpseu_nn)
 }
 
