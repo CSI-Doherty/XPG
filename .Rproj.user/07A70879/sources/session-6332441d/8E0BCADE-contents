@@ -1,0 +1,153 @@
+```{r}
+library(ggpubr)
+library(ggplot2)
+library(purrr)
+source("~/tools/BioinfTools/Plotting_Functions.R")
+
+setwd('~/projects/Mackay_BC_Mouse/Justine/')
+batch1 <- readRDS("/data/gpfs/projects/punim1612/Mackay_BC_Mouse/output/batch1.Rds")
+```
+
+```{r fig.width=2, fig.height=1.5}
+DimPlot(batch1)
+```
+```{r fig.width=2.5, fig.height=1.5 }
+batch1_noNaive = readRDS('output/batch1_noNaive.Rds')
+batch1_noNaive = batch1[,batch1$group != "Naive"]
+
+batch1_noNaive = NormalizeData(batch1_noNaive)
+batch1_noNaive = FindVariableFeatures(batch1_noNaive)
+
+batch1_noNaive = ScaleData(batch1_noNaive)
+batch1_noNaive = RunPCA(batch1_noNaive, verbose = F)
+
+batch1_noNaive = RunUMAP(batch1_noNaive, dims = 1:25)
+DimPlot(batch1_noNaive, group.by = c("group"))
+```
+
+```{r  fig.width=5, fig.height=1.5}
+library(openxlsx)
+
+sigs = lapply(as.list(1:3), function(x) readWorkbook("../data/2022_Crowl_genelists.xlsx", sheet = x, colNames = F))
+sigs = readWorkbook("output/TGFb_genes.xlsx",colNames = T)
+
+batch1_noNaive = AddModuleScore(batch1_noNaive, features = list(c1 = sigs[[1]]$X1, c2 = sigs[[2]]$X1, c3 = sigs[[3]]$X1))
+batch1_noNaive = AddModuleScore(batch1_noNaive, features = list(c1 = sigs$down, c2 = sigs$up, c3 = sigs$all))
+colnames(batch1_noNaive@meta.data) = recode(colnames(batch1_noNaive@meta.data), 'Cluster1' = 'down','Cluster2' = 'up','Cluster3' = 'all')
+
+DimPlot(batch1_noNaive, group.by = 'seurat_clusters')
+
+library(gridExtra)    
+grid.arrange(grobs=lapply(c('down','up','all'), function(x) plotto_scoresignature_plot(paste0(x), batch1_noNaive, size = 0.8)), nrow=1)
+
+grid.arrange(grobs=lapply(c('down','up','all'), function(x) VlnPlot(batch1_noNaive, group.by = 'seurat_clusters', features = x)), nrow=1)
+
+```
+
+```{r}
+batch1_batch2_merged <- readRDS("/data/gpfs/projects/punim1612/Mackay_BC_Mouse/output/batch1_batch2_merged.Rds")
+
+DimPlot(batch1_batch2_merged, group.by = 'group')
+```
+
+```{r fig.width=6, fig.height=2}
+seu = readRDS('output/seu_regressCC_harmonyregressCC.rds')
+DimPlot(seu, reduction = 'harmony_umap', group.by = c('harmony_clusters'))
+
+# fig.width=6, fig.height=2 
+sigs = lapply(as.list(1:3), function(x) readWorkbook("../data/2022_Crowl_genelists.xlsx", sheet = x, colNames = F))
+
+seu = AddModuleScore(seu, features = list(c1 = sigs[[1]]$X1, c2 = sigs[[2]]$X1, c3 = sigs[[3]]$X1))
+seu@meta.data
+
+library(gridExtra)    
+grid.arrange(grobs=lapply(as.list(1:3), function(x) plotto_scoresignature_plot(paste0("Cluster",x), seu, size = 0.8, reduction = 'harmony_umap')), nrow=1)
+
+VlnPlot(seu, group.by = 'harmony_clusters', features = paste0("Cluster",1:3))
+```
+
+
+
+
+```{r fig.height=4}
+batch1_2_noNaive = seu[,seu$group != "Naive"]
+
+batch1_2_noNaive = NormalizeData(batch1_2_noNaive)
+batch1_2_noNaive = FindVariableFeatures(batch1_2_noNaive)
+
+batch1_2_noNaive = ScaleData(batch1_2_noNaive)
+batch1_2_noNaive = RunPCA(batch1_2_noNaive, verbose = F)
+batch1_2_noNaive = RunHarmony(batch1_2_noNaive, group.by.vars = "batch")
+batch1_2_noNaive@reductions
+batch1_2_noNaive = RunUMAP(batch1_2_noNaive, dims = 1:25, reduction = "harmony", reduction.name = "harmony_umap")
+
+DimPlot(batch1_2_noNaive, group.by = c("group"), reduction = "harmony_umap")
+saveRDS(batch1_2_noNaive,'output/batch1_2_noNaive.rds')
+```
+
+
+```{r fig.width=12, fig.height=4 }
+grid.arrange(grobs=lapply(as.list(1:3), function(x) plotto_scoresignature_plot(paste0("Cluster",x), batch1_2_noNaive, size = 0.8, reduction = 'harmony_umap')), nrow=1)
+
+VlnPlot(batch1_2_noNaive, group.by = 'group', features = paste0("Cluster",1:3))
+```
+
+```{r}
+Idents(cd8) <- 'CellType_minor'
+m = FindAllMarkers(cd8, only.pos = T)
+```
+
+```{r}
+library(gprofiler2)
+
+a = m[m$cluster %in% c('TRM1'),]$gene
+b = m[m$cluster %in% c('TRM2'),]$gene
+
+mmus_TRM1 = gorth(a, source_organism = "hsapiens", target_organism = "mmusculus")$ortholog_name
+mmus_TRM2 = gorth(b, source_organism = "hsapiens", target_organism = "mmusculus")$ortholog_name
+
+DimPlot(seu_noblood, group.by = 'condition')
+FeaturePlot(seu_noblood, features = 'Itgae', pt.size = 0.8)
+```
+
+
+```{r fig.width=3.5,fig.height=1.5}
+seu_noblood <- AddModuleScore(seu_noblood, features = list(mmus_TRM1,mmus_TRM2), search=TRUE)
+colnames(seu_noblood@meta.data) = recode(colnames(seu_noblood@meta.data),"Cluster1" = 'TRM1',"Cluster2" = 'TRM2')
+ 
+grid.arrange(grobs=lapply(c('TRM1','TRM2'), function(x) plotto_scoresignature_plot(x, seu_noblood, size = 0.6)), nrow=1)
+grid.arrange(grobs=lapply(c('TRM1','TRM2'), function(x) VlnPlot(seu, features = x, cols = c(brewer.pal(9,name = 'Set3'), brewer.pal(9,name = 'Set1')), pt.size = 0, group.by = 'group') + theme(legend.position = "none")), nrow=1)
+```
+
+
+```{r fig.width=2.8, fig.height=2.5}
+seu <- readRDS('output/seu_regressCC_harmonyregressCC_wotrgd.rds')
+
+seu = seu[,seu$group != "Naive"]
+
+varfeatures = seu@assays$RNA@var.features
+varfeatures = varfeatures[!grepl("^Tr[gd]", varfeatures)]
+seu = RunPCA(seu, reduction.name = 'pca.wotrgd_', features = varfeatures, verbose = F)
+seu = FindNeighbors(seu, reduction = "pca.wotrgd_", graph.name = 'RNA_snn_wotrgd')
+seu = RunUMAP(seu, reduction = "harmonyregressedCC", dims = 1:25, reduction.name = "harmonyregressedCC_umap")
+seu = FindClusters(seu, graph.name = 'RNA_snn_wotrgd', resolution = 0.6)
+DimPlot(seu, reduction = 'harmonyregressedCC_umap', group.by = c("seurat_clusters"), pt.size = 0.5)
+saveRDS(batch1_2_noNaive,'output/seu_regressCC_harmonyregressCC_wotrgd_noNaive.rds')
+```
+
+```{r fig.width=6, fig.height=2 }
+# fig.width=6, fig.height=2 
+
+seu = AddModuleScore(seu, features = list(c1 = sigs[[1]]$X1, c2 = sigs[[2]]$X1, c3 = sigs[[3]]$X1))
+seu@meta.data
+
+library(gridExtra)    
+grid.arrange(grobs=lapply(as.list(1:3), function(x) plotto_scoresignature_plot(paste0("Cluster",x), seu, size = 0.8, reduction = 'harmonyregressedCC_umap')), nrow=1)
+
+VlnPlot(seu, group.by = 'seurat_clusters', features = paste0("Cluster",1:3))
+
+```
+
+
+
+

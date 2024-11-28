@@ -1,0 +1,340 @@
+---
+title: "12_CD8_analysis_final"
+author: "jibsch"
+date: "2023-06-08"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: inline
+---
+
+## Load Libraries and Data
+
+```{r}
+library(Seurat)
+library(tidyverse)
+library(ggrepel)
+source("~/tools/BioinfTools/Plotting_Functions.R")
+
+cols = c("Contra_Healthy" = "springgreen4", "Peri_Healthy" = "springgreen1",
+           "Naive_Blood" = "red3", "Tumour" = "dodgerblue",
+           "Tumour1" = "dodgerblue", "Tumour2" = "dodgerblue3")
+
+seu_cd8 <- subset(seu, subset = type == "CD8 T")
+```
+
+```{r}
+seu_cd8 = NormalizeData(seu_cd8)
+
+seu_cd8 = FindVariableFeatures(seu_cd8)
+
+seu_cd8@assays$RNA@var.features = seu_cd8@assays$RNA@var.features[!startsWith(seu_cd8@assays$RNA@var.features, "MT") &
+                                                          ! startsWith(seu_cd8@assays$RNA@var.features, "TR[AB]") &
+                                                            ! startsWith(seu_cd8@assays$RNA@var.features, "HLA") ]
+
+seu_cd8 = ScaleData(seu_cd8)
+
+seu_cd8 = RunPCA(seu_cd8, verbose = F)
+seu_cd8 = RunUMAP(seu_cd8, dims = 1:25)
+
+seu_cd8 = NormalizeData(seu_cd8, assay = "ADT")
+
+FeaturePlot(seu_cd8, features = "Hu.CD103")
+
+```
+```{r}
+DefaultAssay(seu_cd8) <- 'ADT'
+# we will use all ADT features for dimensional reduction
+# we set a dimensional reduction name to avoid overwriting the 
+VariableFeatures(seu_cd8) <- rownames(seu_cd8[["ADT"]])
+seu_cd8 <- NormalizeData(seu_cd8, normalization.method = 'CLR', margin = 2) %>% 
+  ScaleData() %>% RunPCA(reduction.name = 'apca')
+
+DefaultAssay(seu_cd8) <- 'RNA'
+
+
+seu_cd8 <- FindMultiModalNeighbors(
+  seu_cd8, reduction.list = list("pca", "apca"), 
+  dims.list = list(1:25, 1:18), modality.weight.name = "RNA.weight"
+)
+
+seu_cd8 <- RunUMAP(seu_cd8, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+seu_cd8 <- FindClusters(seu_cd8, graph.name = "wsnn", algorithm = 3, resolution = 1, verbose = FALSE)
+
+```
+
+```{r}
+seu_cd8_filt = seu_cd8[,!seu_cd8$seurat_clusters %in% c(15,9,25,19) & !seu_cd8@assays$ADT@data["Hu.CD4-RPA.T4",] > 1.5]
+
+seu_cd8_filt = NormalizeData(seu_cd8_filt)
+
+seu_cd8_filt = FindVariableFeatures(seu_cd8_filt)
+
+seu_cd8_filt@assays$RNA@var.features = seu_cd8_filt@assays$RNA@var.features[!startsWith(seu_cd8_filt@assays$RNA@var.features, "MT") &
+                                                          ! startsWith(seu_cd8_filt@assays$RNA@var.features, "TR[AB]") &
+                                                            ! startsWith(seu_cd8_filt@assays$RNA@var.features, "HLA") ]
+
+seu_cd8_filt = ScaleData(seu_cd8_filt)
+
+seu_cd8_filt = RunPCA(seu_cd8_filt, verbose = F)
+seu_cd8_filt = RunUMAP(seu_cd8_filt, dims = 1:25)
+
+seu_cd8_filt = NormalizeData(seu_cd8_filt, assay = "ADT")
+
+FeaturePlot(seu_cd8_filt, features = "Hu.CD103")
+
+```
+
+
+## Harmony
+```{r}
+library(harmony)
+
+seu_cd8_filt = RunHarmony(seu_cd8_filt, group.by.vars = "donor",reduction = "apca", dims.use = 1:18, reduction.save = "harmony_cite", assay.use = "ADT")
+seu_cd8_filt = RunHarmony(seu_cd8_filt, group.by.vars = "donor",reduction = "pca", dims.use = 1:30, reduction.save = "harmony", assay.use = "RNA")
+
+seu_cd8_filt <- FindMultiModalNeighbors(
+  seu_cd8_filt, reduction.list = list("harmony", "harmony_cite"), 
+  dims.list = list(1:25, 1:18), modality.weight.name = "RNA.weight"
+)
+
+seu_cd8_filt <- RunUMAP(seu_cd8_filt, nn.name = "weighted.nn", reduction.name = "wnn.harmony.umap", reduction.key = "wnn_harmony_UMAP_")
+seu_cd8_filt <- FindClusters(seu_cd8_filt, graph.name = "wsnn", algorithm = 3, resolution = 1, verbose = FALSE)
+
+seu_cd8_filt$seurat_clusters_wnn_harmony = seu_cd8_filt$seurat_clusters
+
+seu_cd8_filt <- FindClusters(seu_cd8_filt, graph.name = "wsnn", algorithm = 3, resolution = 3, verbose = FALSE)
+
+seu_cd8_filt = SetIdent(seu_cd8_filt, factor(as.numeric(ifelse(seu_cd8_filt$seurat_clusters_wnn_harmony == 2 & seu_cd8_filt$seurat_clusters != 2, "15", as.character(seu_cd8_filt$seurat_clusters_wnn_harmony)))))
+
+seu_cd8_filt$seurat_clusters_wnn_harmony_adjusted = seu_cd8_filt@active.ident
+```
+
+## Assign Fine Cell Identitites
+
+```{r}
+seu_cd8_filt$CellType_major = recode(seu_cd8_filt$seurat_clusters, '0'='TRM', '1'='TEMRA', '2'='TEM', '3'='TEM', '4'='TEM', '5'='TRM',
+                      '6'='TEMRA', '7'='TEX', '8'='gdT', '9'='TEM', '10'='TEMRA', '11'='TEM',
+                      '12'='TEX', '13' = 'MAIT', '14' = 'UK', '15' = 'TEX')
+
+seu_cd8_filt$CellType_minor = recode(seu_cd8_filt$seurat_clusters, '0'='TRM_1', '1'='TEMRA_1', '2'='TEM_1', '3'='TEM_2', '4'='TEM_3', '5'='TRM_2',
+                      '6'='TEMRA_2', '7'='TEX_1', '8'='gdT', '9'='TEM_4', '10'='TEMRA_3', '11'='TEM_5',
+                      '12'='TEX_2', '13' = 'MAIT', '14' = 'UK', '15' = 'TEX_3')
+```
+
+
+## Monocle
+```{r}
+library(monocle3)
+library(SeuratWrappers)
+
+seu = seu_cd8_filt
+
+seu = RunUMAP(seu, nn.name = "weighted.nn")
+seu@reductions$umap@cell.embeddings[,1] = seu@reductions$wnn.harmony.umap@cell.embeddings[,1]
+seu@reductions$umap@cell.embeddings[,2] = seu@reductions$wnn.harmony.umap@cell.embeddings[,2]
+
+cds <- as.cell_data_set(seu)
+
+plot_cells(cds, color_cells_by = "seurat_clusters_wnn_harmony_adjusted", show_trajectory_graph = FALSE)
+
+cds <- cluster_cells(cds, resolution=1e-3)
+
+cds <- learn_graph(cds, use_partition = TRUE, verbose = FALSE)
+
+plot_cells(cds,
+           color_cells_by = "cluster",
+           label_groups_by_cluster=FALSE,
+           label_leaves=FALSE,
+           label_branch_points=FALSE)
+```
+```{r}
+cds <- order_cells(cds)
+
+pdf("../plots/monocle.pdf",7,6)
+plot_cells(cds,
+           color_cells_by = "pseudotime",
+           group_cells_by = "cluster",
+           label_cell_groups = FALSE,
+           label_groups_by_cluster=FALSE,
+           label_leaves=FALSE,
+           label_branch_points=FALSE,
+           label_roots = FALSE,
+           trajectory_graph_color = "black")
+dev.off()
+```
+
+
+## Slingshot
+```{r}
+library(slingshot)
+library(RColorBrewer)
+```
+
+
+```{r}
+sce = as.SingleCellExperiment(seu_cd8_filt )
+
+sce2 <- slingshot(sce, clusterLabels = 'seurat_clusters_wnn_harmony_adjusted', reducedDim = 'WNN.HARMONY.UMAP')
+```
+```{r}
+summary(sce2$slingPseudotime_1)
+
+library(grDevices)
+colors <- colorRampPalette(brewer.pal(11,'Spectral')[-6])(100)
+plotcol <- colors[cut(sce2$slingPseudotime_2, breaks=100)]
+
+
+plot(reducedDims(sce2)$WNN.HARMONY.UMAP, col = plotcol, pch=16, asp = 1)
+lines(SlingshotDataSet(sce2), lwd=2, col='black')
+```
+
+
+## Pseudo Bulk
+```{r}
+library(edgeR)
+g = levels(factor(seu_cd8_filt$CellType_minor))
+counts = lapply(as.list(g), function(x) rowSums(seu_cd8_filt@assays$RNA@counts[, seu_cd8_filt$CellType_minor ==x]))
+
+bulk = purrr::reduce(counts, cbind)
+colnames(bulk) = g
+
+dge = DGEList(bulk[,-c(9,14,15)])
+
+dge$samples$group = factor(gsub("_[1-5]","",g[-c(9,14,15)]))
+
+dge = dge[filterByExpr(dge),]
+dge = calcNormFactors(dge)
+
+mds = plotMDS(dge, col = as.numeric(dge$samples$group), plot = F)
+
+
+
+data.frame(row.names = row.names(dge$samples), x = mds$x, y=mds$y, g = dge$samples$group) %>% as_tibble(rownames = "sample") %>%
+  ggplot(aes(x,y, col = g)) +
+  geom_point(size = 3) +
+  geom_text_repel(aes(label = sample), show.legend = F) + 
+  theme_classic() +
+  labs(x = paste(mds$axislabel, round(mds$var.explained[1]*100) , "%"),
+       y = paste(mds$axislabel, round(mds$var.explained[2]*100) , "%"),
+       colour = "Celltype")-> p;p
+
+ggsave(p, filename = "../plots/pseudo_bulk_mds.pdf", width = 14, height = 11, units = "cm")
+```
+```{r}
+library(org.Hs.eg.db)
+pca = prcomp(t(cpm(dge, log = T)))
+
+summary(pca)
+
+data.frame(row.names = row.names(dge$samples), x = pca$x[,1], y=pca$x[,2], g = dge$samples$group) %>% as_tibble(rownames = "sample") %>%
+  ggplot(aes(x,y, col = g)) +
+  geom_point(size = 3) +
+  geom_text_repel(aes(label = sample), show.legend = F) + 
+  theme_classic() +
+  labs(x = "PC1 (27%)",
+       y = "PC2 (16%)",
+       colour = "Celltype")-> p;p
+ggsave(p, filename = "../plots/pseudo_bulk_pca.pdf", width = 14, height = 11, units = "cm")
+
+pca$rotation %>% as_tibble(rownames = "gene") %>%
+  dplyr::select(gene, PC1) %>%
+  arrange(-abs(PC1)) %>% 
+  mutate(rank = 1:length(PC1)) %>%
+  slice_head(n = 200) -> top200
+
+top200$entrez = mapIds(org.Hs.eg.db, top200$gene, "SYMBOL", column = "ENTREZID")
+kegg_up = kegga(de = top200$entrez[top200$PC1 > 0], species = "Hs")
+kegg_dn = kegga(de = top200$entrez[top200$PC1 < 0], species = "Hs")
+topKEGG(kegg_up)
+
+go_up = goana(de = top200$entrez[top200$PC1 > 0], species = "Hs")
+go_dn = goana(de = top200$entrez[top200$PC1 < 0], species = "Hs")
+topGO(go_up)
+
+go_dn[go_up$Term %in% c("cell migration", "regulation of cell migration", "positive regulation of cell migration", 
+                        "negative regulation of cell migration", "tissue migration", "T cell migration", 
+                        "regulation of T cell migration", 
+                        "positive regulation of T cell migration", "negative regulation of T cell migration"),]
+```
+
+### TEPX signature
+```{r}
+cpm(dge, log = T)[c("SELL", "TCF7", "CCR7"),]
+```
+
+```{r}
+library(openxlsx)
+source("~/tools/BioinfTools/Utility_Functions.R")
+tpex = readWorkbook("~/projects/Utzschneider_Catarina_P14/data/Supplementary Table 3 - stemness signature.xlsx", startRow = 2)
+
+human_tpex = gprofiler2::gorth(tpex$X1[tpex$avg_log2FC>0], source_organism = "mmusculus", target_organism = "hsapiens")
+
+seu_cd8_filt = AddSignature(seu_cd8_filt, genes = human_tpex$ortholog_name, "Mouse_TPEX")
+
+VlnPlot(seu_cd8_filt, "Mouse_TPEX", group.by = "CellType_minor")
+```
+```{r}
+tpex2 = readWorkbook("../data/science.abe6474_table_s3.xlsx", sheet = 2, startRow = 2)
+table(tpex2$cluster.name)
+
+
+seu_cd8_filt = AddSignature(seu_cd8_filt, genes = tpex2$geneSymbol[tpex2$cluster.name == "CD8.c14(TCF7+ Tex)"], "CD8.c14(TCF7+ Tex)")
+
+VlnPlot(seu_cd8_filt, "CD8.c14(TCF7+ Tex)", group.by = "CellType_minor")
+```
+
+
+```{r}
+library(slingshot)
+
+sce = SingleCellExperiment(dge$counts)
+normcounts(sce) = edgeR::cpm(dge,log = T)
+sce = slingshot(sce, reducedDim = pca$x[,1:2], clusterLabels = dge$samples$group)
+
+library(grDevices)
+colors <- colorRampPalette(brewer.pal(11,'Spectral')[-6])(100)
+plotcol <- colors[cut(sce$slingPseudotime_1, breaks=100)]
+
+
+plot(pca$x[,1:2], col = plotcol, pch=16, asp = 1)
+lines(SlingshotDataSet(sce), lwd=2, col='black')
+```
+
+```{r}
+library(monocle3)
+
+seu_bulk = CreateSeuratObject(dge$counts)
+seu_bulk@reductions[["umap"]] = CreateDimReducObject(embeddings = pca$x[,1:2], key = "PC")
+seu_bulk$group = dge$samples$group
+
+cds <- SeuratWrappers::as.cell_data_set(seu_bulk)
+
+plot_cells(cds, color_cells_by = "group", show_trajectory_graph = FALSE, reduction_method = "PCA")
+
+cds <- cluster_cells(cds, resolution=1e-3, k = 3)
+
+# cds <- learn_graph(cds, use_partition = TRUE, verbose = FALSE, learn_graph_control = list(nn_search_k = 3))
+cds <- learn_graph(cds, use_partition = TRUE, verbose = FALSE)
+
+plot_cells(cds,
+           color_cells_by = "cluster",
+           label_groups_by_cluster=FALSE,
+           label_leaves=FALSE,
+           label_branch_points=FALSE)
+```
+```{r}
+cds <- order_cells(cds)
+
+pdf("../plots/monocle.pdf",7,6)
+plot_cells(cds,
+           color_cells_by = "pseudotime",
+           group_cells_by = "cluster",
+           label_cell_groups = FALSE,
+           label_groups_by_cluster=FALSE,
+           label_leaves=FALSE,
+           label_branch_points=FALSE,
+           label_roots = FALSE,
+           trajectory_graph_color = "black")
+dev.off()
+```
+

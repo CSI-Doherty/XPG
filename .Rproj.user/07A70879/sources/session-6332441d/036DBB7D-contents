@@ -1,0 +1,20 @@
+setwd('/data/gpfs/projects/punim1612/Mackay_BC_Mouse/Justine')
+library(Seurat)
+seu = readRDS('output/seu_regressCC_harmonyregressCC_wotrgd.rds')
+
+##Markers
+Idents(seu) <- 'regressedCC_clusters'
+markers = FindAllMarkers(seu, only.pos = F)
+write.csv(markers, file = "output/markers_batch1_2_regressedCC_clusters.csv", row.names = F, quote = F)
+
+Idents(seu) <- 'wotrgd_clusters'
+markers = FindAllMarkers(seu, only.pos = F)
+write.csv(markers, file = "output/markers_batch1_2_wotrgd_clusters.csv", row.names = F, quote = F)
+
+Idents(seu) <- 'group'
+markers = FindAllMarkers(seu, only.pos = F)
+write.csv(markers, file = "output/markers_batch1_2_group.csv", row.names = F, quote = F)
+
+Idents(seu) <- 'harmony_clusters'
+markers = FindAllMarkers(seu, only.pos = F)
+write.csv(markers, file = "output/markers_batch1_2_harmony.csv", row.names = F, quote = F)

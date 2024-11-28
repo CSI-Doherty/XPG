@@ -4,7 +4,7 @@
 \alias{nnfunc}
 \title{NN Connection}
 \usage{
-nnfunc(seu, graph, label, cat)
+nnfunc(s, graph, label, cat)
 }
 \value{
 The average score per cell type and average percentage per each cell

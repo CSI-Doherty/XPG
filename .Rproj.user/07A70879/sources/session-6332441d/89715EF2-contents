@@ -1,0 +1,100 @@
+---
+title: "maleika_scrna_hto"
+author: "Daniel Rawlinson"
+date: "25/10/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+Imports
+```{r}
+library(Seurat)
+library(SeuratDisk)
+library(GGally)
+library(DropletUtils)
+```
+
+Load data
+```{r}
+data_dir <- '/data/projects/punim1612/Mackay_BC_Mouse'
+data_sources <- list.files(data_dir, 'batch1_lane[A-B]_multi', full.names = T)
+mtx_dirs <- paste0(data_sources, '/outs/multi/count/raw_feature_bc_matrix')
+lanes <- lapply(mtx_dirs, Seurat::Read10X)
+names(lanes) <- basename(data_sources)
+lanes <- lapply(lanes, function(x) {
+  seu <- CreateSeuratObject(counts = x$`Gene Expression`, project = 'maleika_hto')
+  seu[['HTO']] <- CreateAssayObject(counts = x$`Multiplexing Capture`)
+  return(seu)
+} )
+```
+Look at correlations in HTO before normalisation
+```{r}
+to_unnormed.T <-  SeuratDisk::Transpose(lanes$batch1_laneA_multi[['HTO']]@counts)
+ggpairs(data.frame(to_unnormed.T))
+VlnPlot(object = lanes$batch1_laneA_multi, assay = 'HTO', features = rownames(lanes$batch1_laneA_multi[['HTO']]@counts))
+```
+
+Filter out empty droplets
+```{r}
+empties <- lapply(lanes, function(x) emptyDrops(m = x[['RNA']]@counts))
+has_cells <- lapply(empties, function(x) subset(x, FDR <= 0.001))
+lanes_filtered <- mapply(FUN = function(seu, list) seu[,rownames(list)], lanes, has_cells)
+```
+
+Visualise again
+```{r message = F}
+hto_unnormed.T <- SeuratDisk::Transpose(lanes_filtered$batch1_laneA_multi[['HTO']]@counts)
+ggpairs(data.frame(hto_unnormed.T))
+VlnPlot(object = lanes_filtered$batch1_laneA_multi, assay = 'HTO', 
+        features = rownames(lanes_filtered$batch1_laneA_multi[['HTO']]@counts))
+```
+
+
+Analyse raw
+```{r}
+#is total UMI count < 1000?
+n_umi <- function(assay_obj) {
+  #assay_obj <- lanes_filtered$batch1_laneA_multi[['HTO']]@counts
+  apply(assay_obj, MARGIN = 1, sum)
+}
+pc_umi <- function(sum_table) {
+  total_sum <- sum(sum_table)
+  pcents <- mapply(function(x) x/(total_sum - x),sum_table)
+  
+}
+
+sum_umis_tables <- lapply(lanes_filtered, function(x) n_umi(x[['HTO']]@counts))
+pc_umis_tables <- lapply(sum_umis_tables, pc_umi )
+mapply(FUN = function(x, y) cbind(total_umi = x, pc_of_other = y), sum_umis_tables, pc_umis_tables, SIMPLIFY = F)
+
+```
+Can rescue if they are all still bimodal. Plot histograms.
+```{r message = F, warning = F}
+lapply(lanes_filtered, function(x) {
+assay_obj <- x@assays$HTO@counts
+SeuratDisk::Transpose(assay_obj) %>% as.data.frame() %>% reshape2::melt(value.name = 'UMI_count') %>% ggplot(aes(x = UMI_count)) + geom_histogram() + scale_x_log10() + facet_wrap(ncol=1, facets = vars(variable)) + ylab('Count of cells') + xlab('UMI count')
+
+} )
+```
+
+Normalise
+```{r}
+lanes_filtered <- lapply(lanes_filtered, function(x) {
+  x <- NormalizeData(x, assay = 'RNA')
+  x <- NormalizeData(x, assay = 'HTO', normalization.method = 'CLR', margin= 1) 
+} )
+```
+Visualse
+```{r}
+VlnPlot(object = lanes_filtered$batch1_laneA_multi, assay = 'HTO', features =  rownames(lanes_filtered$batch1_laneA_multi[['HTO']]))
+VlnPlot(object = lanes_filtered$batch1_laneB_multi, assay = 'HTO', features =  rownames(lanes_filtered$batch1_laneB_multi[['HTO']]))
+
+HTOHeatmap(lanes_filtered$batch1_laneA_multi)
+```
+
+
+

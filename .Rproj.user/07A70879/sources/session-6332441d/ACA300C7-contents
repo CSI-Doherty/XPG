@@ -1,0 +1,309 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+setwd('/data/gpfs/projects/punim1612/Mackay_BC_Mouse/Justine')
+library(Seurat)
+library(ShinyCell)
+```
+
+```{r fig2, fig.height = 2, fig.width = 4, fig.align = "center"}
+seu = readRDS('../output/batch1_batch2_merged.Rds')
+seu$seurat_clusters_wo_regressCC = seu$seurat_clusters
+
+##Regressing out CC genes
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+seu <- CellCycleScoring(seu, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+seu@meta.data
+seu <- ScaleData(seu, vars.to.regress = c("S.Score", "G2M.Score"), features = rownames(seu))
+saveRDS(seu,'output/seu_aftscale.RDS')
+
+seu = readRDS('output/seu_aftscale.RDS')
+
+##regressingCC with trgd 
+seu = RunPCA(seu,reduction.name = 'pca', features = varfeatures, verbose = F)
+seu = FindNeighbors(seu, reduction = "pca", graph.name = 'RNA_snn')
+seu = RunUMAP(seu, dims = 1:25, nn.name = "regressedCC.nn", reduction.name = "regressedCC.umap", reduction.key = "regressedCC_UMAP_")
+seu = FindClusters(seu, graph.name = "RNA_snn", algorithm = 3, resolution = 1, verbose = FALSE)
+seu$regressedCC_clusters = seu$seurat_clusters
+
+DimPlot(seu, reduction = "regressedCC.umap", group.by = c("regressedCC_clusters", 'batch','Phase'), label = T)
+DimPlot(seu, reduction = 'regressedCC.umap',group.by = c('batch'), split.by = 'batch')
+
+##Harmony on regressedCC
+library(harmony)
+seu = RunHarmony(seu, group.by.vars = "batch", reduction.save = 'harmonyregressedCC')
+seu = RunUMAP(seu, reduction = "harmonyregressedCC", dims = 1:25, reduction.name = "harmonyregressedCC_umap")
+seu = FindNeighbors(seu, reduction = "harmonyregressedCC", dims = 1:25)
+seu = FindClusters(seu)
+
+seu$harmony_clusters = seu$seurat_clusters
+
+DimPlot(seu, reduction = 'harmonyregressedCC_umap',group.by = c('harmony_clusters','batch','Phase'))
+
+saveRDS(seu, 'output/seu_regressCC_harmonyregressCC.rds')
+
+##without trgd
+varfeatures = seu@assays$RNA@var.features
+varfeatures = varfeatures[!grepl("^Tr[gd]", varfeatures)]
+seu = RunPCA(seu, reduction.name = 'pca.wotrgd_', features = varfeatures, verbose = F)
+seu = FindNeighbors(seu, reduction = "pca.wotrgd_", graph.name = 'RNA_snn_wotrgd')
+seu = RunUMAP(seu, reduction = 'pca.wotrgd_', dims = 1:25, nn.name = "wotrgd.nn", reduction.name = "wotrgd.umap", reduction.key = "wotrgd_UMAP_")
+seu = FindClusters(seu, graph.name = "RNA_snn_wotrgd", algorithm = 3, resolution = 1, verbose = FALSE)
+seu$wotrgd_clusters = seu$seurat_clusters
+
+DimPlot(seu, reduction = "wotrgd.umap", group.by = c("wotrgd_clusters", 'batch'), label = T)
+
+##Markers
+Idents(seu) <- 'regressedCC_clusters'
+markers = FindAllMarkers(seu, only.pos = F)
+write.csv(markers, file = "output/markers_batch1_2_regressedCC_clusters.csv", row.names = F, quote = F)
+
+Idents(seu) <- 'wotrgd_clusters'
+markers = FindAllMarkers(seu, only.pos = F)
+write.csv(markers, file = "output/markers_batch1_2_wotrgd_clusters.csv", row.names = F, quote = F)
+
+Idents(seu) <- 'group'
+markers = FindAllMarkers(seu, only.pos = F)
+write.csv(markers, file = "output/markers_batch1_2_group.csv", row.names = F, quote = F)
+
+Idents(seu) <- 'harmony_clusters'
+markers = FindAllMarkers(seu, only.pos = F)
+write.csv(markers, file = "output/markers_batch1_2_harmony.csv", row.names = F, quote = F)
+
+saveRDS(seu, 'output/seu_regressCC_harmonyregressCC_wotrgd.rds')
+
+
+## Shiny App
+seu = readRDS("output/seu_regressCC_harmonyregressCC_wotrgd.rds")
+
+scConf = createConfig(seu)
+makeShinyApp(seu, scConf, gene.mapping = TRUE, shiny.title = "Mouse Infected T Cells", shiny.dir = "regressCC_harmonyregressCC_wotrgd_shiny") 
+
+```
+
+
+## batch2
+
+```{r fig2, fig.height = 1, fig.width = 3, fig.align = "center"}
+batch2 = readRDS("../output/seu.Rds")
+batch2$batch = "batch 2"
+batch2$group = gsub("lane [AB] ", "",batch2$orig.ident)
+batch2$orig.ident = batch2$lane
+
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+batch2 <- CellCycleScoring(batch2, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+batch2@meta.data
+batch2 <- ScaleData(batch2, vars.to.regress = c("S.Score", "G2M.Score"), features = rownames(seu))
+saveRDS(batch2,'output/batch2_aftscale.RDS')
+
+##regressingCC with trgd 
+varfeatures = seu@assays$RNA@var.features
+batch2 = RunPCA(batch2,reduction.name = 'pca', features = varfeatures, verbose = F)
+batch2 = FindNeighbors(batch2, reduction = "pca", graph.name = 'RNA_snn')
+batch2 = RunUMAP(batch2, dims = 1:25, nn.name = "regressedCC.nn", reduction.name = "regressedCC.umap", reduction.key = "regressedCC_UMAP_")
+batch2 = FindClusters(batch2, graph.name = "RNA_snn", algorithm = 3, resolution = 1, verbose = FALSE)
+batch2$regressedCC_clusters = batch2$seurat_clusters
+
+DimPlot(batch2, reduction = "regressedCC.umap", group.by = c("regressedCC_clusters", 'batch','Phase'), label = T)
+
+
+##without trgd
+varfeatures = seu@assays$RNA@var.features
+varfeatures = varfeatures[!grepl("^Tr[gd]", varfeatures)]
+batch2 = RunPCA(batch2, reduction.name = 'pca.wotrgd_', features = varfeatures, verbose = F)
+batch2 = FindNeighbors(batch2, reduction = "pca.wotrgd_", graph.name = 'RNA_snn_wotrgd')
+batch2 = RunUMAP(batch2, reduction = 'pca.wotrgd_', dims = 1:25, nn.name = "wotrgd.nn", reduction.name = "wotrgd.umap", reduction.key = "wotrgd_UMAP_")
+batch2 = FindClusters(batch2, graph.name = "RNA_snn_wotrgd", algorithm = 3, resolution = 1, verbose = FALSE)
+batch2$wotrgd_clusters = batch2$seurat_clusters
+
+DimPlot(batch2, reduction = "wotrgd.umap", group.by = c("wotrgd_clusters", 'batch'), label = T)
+
+saveRDS(batch2, 'output/batch2_regressCC_wotrgd.rds')
+
+##Markers
+Idents(batch2) <- 'regressedCC_clusters'
+markers = FindAllMarkers(batch2, only.pos = F)
+write.csv(markers, file = "output/markers_batch2_regressedCC_clusters.csv", row.names = F, quote = F)
+
+Idents(batch2) <- 'wotrgd_clusters'
+markers = FindAllMarkers(batch2, only.pos = F)
+write.csv(markers, file = "output/markers_batch2_wotrgd_clusters.csv", row.names = F, quote = F)
+
+Idents(batch2) <- 'group'
+markers = FindAllMarkers(batch2, only.pos = F)
+write.csv(markers, file = "output/markers_batch2_group.csv", row.names = F, quote = F)
+
+scConf = createConfig(batch2)
+makeShinyApp(batch2, scConf, gene.mapping = TRUE, shiny.title = "Mouse Infected T Cells - batch 2", shiny.dir = "batch2_regressCC_wotrgd_shiny") 
+
+```
+
+##batch1
+```{r}
+batch1 = readRDS("output/batch1_noNaive.Rds")
+batch1@meta.data
+
+DimPlot(batch1)
+
+Idents(batch1) <- 'seurat_clusters'
+markers = FindAllMarkers(batch1, only.pos = F)
+markers = markers[abs(markers$avg_log2FC) >= 0.125,]
+write.csv(markers, file = "output/markers_batch1_noNaive_cluster.csv", row.names = F, quote = F)
+
+Idents(batch1) <- 'group'
+markers = FindAllMarkers(batch1, only.pos = F)
+markers = markers[abs(markers$avg_log2FC) >= 0.125,]
+write.csv(markers, file = "output/markers_batch1_noNaive_group.csv", row.names = F, quote = F)
+```
+
+```{r}
+library(ShinyCell)
+
+scConf = createConfig(batch1)
+
+makeShinyApp(batch1, scConf, gene.mapping = TRUE,
+             shiny.title = "Mouse Infected T Cells batch1_noNaive", shiny.dir = "batch1_noNaive_filteredmito_shiny") 
+```
+
+
+##--ignore--## 
+```{r fig2, fig.height = 2, fig.width = 9, fig.align = "center"}
+varfeatures = seu@assays$SCT@var.features
+varfeatures = varfeatures[grepl("^Rp[sl]", varfeatures) | grepl("^Mrp[sl]", varfeatures)]
+seu$percent.rb = PercentageFeatureSet(seu, pattern = varfeatures)
+
+VlnPlot(seu, features = c("nFeature_RNA", "nCount_RNA", "percent.mt","percent.rb"), ncol = 4)
+```
+
+```{r fig2, fig.height = 1.5, fig.width = 2.5, fig.align = "center"}
+unique(seu$group)
+DimPlot(seu, group.by = c("group"), label = T)
+markers_hsv = FindMarkers(seu, group.by = 'group', ident.1 = "HSV_gBT", ident.2 = "HSV_OT-I")
+write.csv(markers_hsv, file = "output/markers_hsv_gBT_OTI.csv", row.names = T, quote = F)
+markers_dnfb = FindMarkers(seu, group.by = 'group', ident.1 = "DNFB_gBT", ident.2 = "DNFB_OT-I")
+write.csv(markers_dnfb, file = "output/markers_dnfb_gBT_OTI.csv", row.names = T, quote = F)
+
+inter = intersect(rownames(markers_hsv),rownames(markers_dnfb))
+
+length(rownames(markers_dnfb[!rownames(markers_dnfb) %in% inter,]))
+max(markers_dnfb$p_val)
+
+length(rownames(markers_hsv[!rownames(markers_hsv) %in% inter,]))
+max(markers_hsv$p_val)
+```
+
+```{r}
+tmp = table(seu@meta.data[,c('harmony_clusters','group')])
+cn = colnames(tmp); rn = paste0('cl',rownames(tmp))
+tmp = as.matrix.data.frame(tmp);rownames(tmp)=rn;colnames(tmp)=cn
+data.frame(tmp)
+```
+
+```{r}
+tmp
+round(prop.table(tmp,margin = 2)*100)
+round(t(prop.table(t(prop.table(tmp,margin = 2)*100),margin = 2)*100))
+
+data = data.frame(prop.table(t(prop.table(tmp,margin = 2)*100),margin = 2)*100)
+
+data1 = stack(data)
+data1$group = rep(rownames(data), times = ncol(data))
+data1
+```
+```{r fig2, fig.height = 1.5, fig.width = 2.3, fig.align = "center"}
+require(RColorBrewer)
+ggplot(data1, aes(fill=group, y=values, x=ind)) + 
+    geom_bar(position = 'stack',stat="identity") +
+    scale_fill_manual(values=rev(brewer.pal(n = 10, name ="Paired"))) +
+    scale_x_discrete(guide = guide_axis(angle = 90))
+```
+
+
+
+```{r fig2, fig.height = 1.5, fig.width = 2.3, fig.align = "center"}
+DimPlot(seu, reduction = 'harmony_umap',group.by = c('group'), cols =rev(brewer.pal(n = 10, name ="Paired")))
+DimPlot(seu, group.by = c('group'), cols =rev(brewer.pal(n = 10, name ="Paired")))
+```
+
+```{r fig2, fig.height = 2, fig.width = 10, fig.align = "center"}
+library(harmony)
+seu = RunHarmony(seu, group.by.vars = "batch")
+seu = RunUMAP(seu, reduction = "harmony", dims = 1:25, reduction.name = "harmony_umap")
+seu = FindNeighbors(seu, reduction = "harmony", dims = 1:25)
+seu = FindClusters(seu, resolution = 1)
+seu$harmony_clusters = seu$seurat_clusters
+
+DimPlot(seu, reduction = 'harmony_umap',group.by = c('seurat_clusters', 'seurat_clusters_old','batch', 'orig.ident'), ncol = 4)
+```
+```{r}
+VlnPlot(seu, features = c("percent.rb"), group.by = 'harmony_clusters')
+```
+
+
+```{r fig2, fig.height = 1.5, fig.width = 2, fig.align = "center"}
+DimPlot(seu, reduction = 'harmony_umap',group.by = c('seurat_clusters'), pt.size = .4, label = T)
+```
+
+```{r}
+unique(seu$group)
+markers_hsv = FindMarkers(seu, reduction = 'harmony_umap', group.by = 'group', ident.1 = "HSV_gBT", ident.2 = "HSV_OT-I")
+write.csv(markers_hsv, file = "output/markers_hsv_gBT_OTI.csv", row.names = T, quote = F)
+markers_dnfb = FindMarkers(seu, group.by = 'group', ident.1 = "DNFB_gBT", ident.2 = "DNFB_OT-I")
+write.csv(markers_dnfb, file = "output/markers_dnfb_gBT_OTI.csv", row.names = T, quote = F)
+
+inter = intersect(rownames(markers_hsv),rownames(markers_dnfb))
+
+length(rownames(markers_dnfb[!rownames(markers_dnfb) %in% inter,]))
+max(markers_dnfb$p_val)
+
+length(rownames(markers_hsv[!rownames(markers_hsv) %in% inter,]))
+max(markers_hsv$p_val)
+```
+
+##Seuratintegration
+```{r}
+ifnb.list <- SplitObject(seu, split.by = "batch")
+
+# normalize and identify variable features for each dataset independently
+ifnb.list <- lapply(X = ifnb.list, FUN = function(x) {
+    x <- NormalizeData(x)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+
+# select features that are repeatedly variable across datasets for integration
+features <- SelectIntegrationFeatures(object.list = ifnb.list)
+immune.anchors <- FindIntegrationAnchors(object.list = ifnb.list, anchor.features = features)
+# this command creates an 'integrated' data assay
+seu_an <- IntegrateData(anchorset = immune.anchors)
+
+seu_an <- ScaleData(seu_an, verbose = FALSE)
+seu_an <- RunPCA(seu_an)
+seu_an <- RunUMAP(seu_an, reduction = "pca", dims = 1:25)
+seu_an <- FindNeighbors(seu_an, reduction = "pca", dims = 1:25)
+seu_an <- FindClusters(seu_an, resolution = 0.5)
+
+seu
+seu_an
+
+FeaturePlot(texrds, group.by = 'sampleID')
+
+colnames(TRM_TEX_integrated@meta.data) = recode(colnames(TRM_TEX_integrated@meta.data), 'integrated_snn_res.0.5' = 'SeuratIntegrationClusters')
+
+```
+
+```{r}
+Idents(seu) <- 'unintegrated_clusters'
+markers = FindAllMarkers(seu, only.pos = F)
+write.csv(markers, file = "output/markers_unintegrated.csv", row.names = F, quote = F)
+```
+
+
+
+
+
+
