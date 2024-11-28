@@ -20,13 +20,14 @@ lapply2 <- function (X, FUN, ...)  {
 #' Calculating Percentage Neighbourhood Connection 
 #' @return The average score per cell type and average percentage per each cell  
 #' @export
-nnfunc = function(seu, graph, label, cat){
-  nn = seu@graphs[[graph]]
-  tmpll = data.frame(lapply2(levels(seu@meta.data[,label]), function(x){
-    cellid = rownames(seu@meta.data[seu@meta.data[,label]==x,])
+nnfunc = function(s, graph, label, cat){
+  print(s)
+  nn = s@graphs[[graph]]
+  tmpll = data.frame(lapply2(levels(s@meta.data[,label]), function(x){
+    cellid = rownames(s@meta.data[s@meta.data[,label]==x,])
     return(rowSums(nn[,colnames(nn) %in% cellid]))
   }), check.names = FALSE)
-  seu@meta.data[,label, drop = FALSE] %>% as_tibble(rownames = 'barcodes') %>% left_join(tmpll %>% as_tibble(rownames = 'barcodes')) -> tmpll
+  s@meta.data[,label, drop = FALSE] %>% as_tibble(rownames = 'barcodes') %>% left_join(tmpll %>% as_tibble(rownames = 'barcodes')) -> tmpll
 
   tmpll %>% select(!barcodes) %>% group_by(!!rlang::sym(label)) %>% summarise_each(sum) %>% melt(id.vars = label) %>%
     group_by(!!rlang::sym(label)) %>% mutate(per =  100 *value/sum(value)) -> m
@@ -36,7 +37,7 @@ nnfunc = function(seu, graph, label, cat){
     return(c(l, mean(l)))
   }else if(group == 'cell'){
     ct_ll = as.numeric(apply(tmpll, 1, function(x) x[x[label]]))
-    rs = rowSums(tmpll[,levels(seu@meta.data[,label])])
+    rs = rowSums(tmpll[,levels(s@meta.data[,label])])
     avg = sum(ct_ll/rs*100)/dim(tmpll)[1]
     return(c(l, avg))
   }
