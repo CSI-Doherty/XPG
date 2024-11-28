@@ -75,7 +75,7 @@ XPG = function(g, sp, graph, seu, ct, core, k, cat){
         colnames(df) = c(levels(seu@meta.data[,ct]),'average','gene','round')
       }))
       mer = rbind(mer,df)
-      arr = c(arr, df$gene[which.max(df$average)])
+      arr = c(arr, df[which.max(df$average),'gene'])
       g = g[!g %in% arr]
       
       jet <- Sys.time()
