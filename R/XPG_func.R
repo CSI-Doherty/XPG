@@ -24,7 +24,7 @@ nnfunc = function(s, graph, label, cat){
   nn = s@graphs[[graph]]
   tmpll = data.frame(lapply2(levels(s@meta.data[,label]), function(x){
     cellid = rownames(s@meta.data[s@meta.data[,label]==x,])
-    print(head(cellid))
+    print(head(colnames(nn)))
     return(rowSums(nn[,colnames(nn) %in% cellid]))
   }), check.names = FALSE)
   s@meta.data[,label, drop = FALSE] %>% as_tibble(rownames = 'barcodes') %>% left_join(tmpll %>% as_tibble(rownames = 'barcodes')) -> tmpll
