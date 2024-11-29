@@ -19,6 +19,8 @@ XPG(g, sp, graph, seu, ct, core, k, cat)
 
 \item{core}{number of available cores}
 
+\item{k}{number neighbour per cell}
+
 \item{cat}{average per cell type = 'group' or per cell = 'cell'}
 }
 \value{

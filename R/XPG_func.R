@@ -1,7 +1,7 @@
 #' NN Connection
 #'
-#' Calculating Percentage Neighbourhood Connection 
-#' @return The average score per cell type and average percentage per each cell  
+#' Calculating Percentage Neighbourhood Connection
+#' @return The average score per cell type and average percentage per each cell
 #' @export
 nnfunc = function(s, graph, label, k, cat){
   l = as.character(s@meta.data[,label])
@@ -40,7 +40,7 @@ mclapplyfunc = function(gi = gi, seu = seu, graph = graph, sp = sp, arr=arr, ct 
   })
 }
 
-#' Main XPG function 
+#' Main XPG function
 #'
 #' Initialise all empty variables
 #' @param g Genes of interest
@@ -49,9 +49,10 @@ mclapplyfunc = function(gi = gi, seu = seu, graph = graph, sp = sp, arr=arr, ct 
 #' @param seu Seurat object
 #' @param ct celltype column in Seurat object
 #' @param core number of available cores
+#' @param k number neighbour per cell
 #' @param cat average per cell type = 'group' or per cell = 'cell'
 #' @return a list of 3 objects (1. Percentage matrix 2. Ranked gene list 3. Time(s) per run)
-#' @examples 
+#' @examples
 #' output = main_func(g = c('EPCAM','MS4A1','MZB1'), sp = c('KLF2','CD8A','COL1A1','EPCAM'), graph = 'RNA_nn', seu = obj, ct = 'celltype', core = 100 , k = 10, cat = 'group');
 #' @export
 XPG = function(g, sp, graph, seu, ct, core, k, cat){
@@ -74,13 +75,13 @@ XPG = function(g, sp, graph, seu, ct, core, k, cat){
           df = cbind(df,g,rep(j,dim(df)[1]))
         }
       }))
-      
+
       colnames(df) = c(l,'average','gene','round')
       arr = c(arr, df[,'gene'][which.max(df[,'average'])])
       g = g[!g %in% arr]
-    
+
       mer = rbind(mer,df)
-      
+
       jet <- Sys.time()
       t = difftime(jet, jst, units = 'secs')
       jt = c(jt,t)
