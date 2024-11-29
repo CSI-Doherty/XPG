@@ -59,7 +59,6 @@ XPG = function(g, sp, graph, seu, ct, core, k, cat){
   it = c(); jt = c()
   startlen = length(g)
   l = levels(seu@meta.data[,ct])
-  ll = length(l)
 
   tryCatch({
     for(j in 0:startlen){
@@ -69,17 +68,17 @@ XPG = function(g, sp, graph, seu, ct, core, k, cat){
         if(j==0){
           df = insider(gi = c(), seu = seu, graph = graph, sp = sp, arr = arr, ct = ct, k = k, cat = cat)
           df = data.frame(t(c(df,'sp',0)))
-          colnames(df) = c(l,'average','gene','round')
         }else{
-          df = mclapply(g[1:3], FUN = mclapplyfunc, mc.cores = core, mc.preschedule = T, seu = seu, graph = graph, sp = sp, arr = arr, ct = ct, k = k, cat = cat)
+          df = mclapply(g, FUN = mclapplyfunc, mc.cores = core, mc.preschedule = T, seu = seu, graph = graph, sp = sp, arr = arr, ct = ct, k = k, cat = cat)
           if (is.list(df)) df = do.call(rbind, df)
           df = cbind(df,g,rep(j,dim(df)[1]))
-          colnames(df) = c(l,'average','gene','round')
-          arr = c(arr, df[,ll+2][which.max(df[,ll+1])])
-          g = g[!g %in% arr]
         }
-        
       }))
+      
+      colnames(df) = c(l,'average','gene','round')
+      arr = c(arr, df[,'gene'][which.max(df[,'average'])])
+      g = g[!g %in% arr]
+    
       mer = rbind(mer,df)
       
       jet <- Sys.time()
