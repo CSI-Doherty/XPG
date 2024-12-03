@@ -20,8 +20,8 @@ nnfunc = function(s, graph, label, k, cat){
 insider = function(gi = gi, seu = seu, graph = graph, sp = sp, arr=arr, ct = ct, k = 10, cat = 'group'){
   gene = c(sp, arr, gi)
   tmpseu <- seu[Features(seu) %in% gene,]
-  tmpseu <- RunPCA(tmpseu, npcs = 5, features = gene, verbose = F)
-  tmpseu <- FindNeighbors(tmpseu, reduction = "pca", k.param = k, dims = 1:5, compute.SNN = TRUE, verbose = F)
+  tmpseu <- RunPCA(tmpseu, npcs = 12, features = gene, verbose = F)
+  tmpseu <- FindNeighbors(tmpseu, reduction = "pca", k.param = k, dims = 1:10, compute.SNN = TRUE, verbose = F, )
   tmpseu_nn = nnfunc(tmpseu, graph, ct, k, cat)
   return(tmpseu_nn)
 }
