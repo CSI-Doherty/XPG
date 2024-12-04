@@ -21,7 +21,7 @@ insider = function(gi = gi, seu = seu, graph = graph, sp = sp, arr=arr, ct = ct,
   gene = c(sp, arr, gi)
   tmpseu <- seu[Features(seu) %in% gene,]
   tmpseu <- RunPCA(tmpseu, npcs = 12, features = gene, verbose = F)
-  tmpseu <- FindNeighbors(tmpseu, reduction = "pca", k.param = k, dims = 1:10, compute.SNN = TRUE, verbose = F, )
+  tmpseu <- FindNeighbors(tmpseu, reduction = "pca", k.param = k, dims = 1:10, compute.SNN = TRUE, verbose = F)
   tmpseu_nn = nnfunc(tmpseu, graph, ct, k, cat)
   return(tmpseu_nn)
 }
@@ -62,25 +62,17 @@ XPG = function(g, sp, graph, seu, ct, core, k, cat){
   l = levels(seu@meta.data[,ct])
 
   tryCatch({
-    for(j in 0:startlen){
+    for(j in 1:startlen){
       print(paste('Round', j))
       jst <- Sys.time()
       suppressMessages(suppressWarnings({
-        if(j==0){
-          df = insider(gi = c(), seu = seu, graph = graph, sp = sp, arr = arr, ct = ct, k = k, cat = cat)
-          df = data.frame(t(c(df,'sp',0)))
-        }else{
-          df = parallel::mclapply(g, FUN = mclapplyfunc, mc.cores = core, mc.preschedule = FALSE, seu = seu, graph = graph, sp = sp, arr = arr, ct = ct, k = k, cat = cat)
-          print('hi')
-          if (is.list(df)) df = do.call(rbind, df)
-          df = cbind(df,g,rep(j,dim(df)[1]))
-        }
+        df = parallel::mclapply(g, FUN = mclapplyfunc, mc.cores = core, mc.preschedule = FALSE, seu = seu, graph = graph, sp = sp, arr = arr, ct = ct, k = k, cat = cat)
+        if (is.list(df)) df = do.call(rbind, df)
+        df = cbind(df,g,rep(j,dim(df)[1]))
+        colnames(df) = c(l,'average','gene','round')
+        arr = c(arr, df[,'gene'][which.max(df[,'average'])])
+        g = g[!g %in% arr]
       }))
-
-      colnames(df) = c(l,'average','gene','round')
-      arr = c(arr, df[,'gene'][which.max(df[,'average'])])
-      g = g[!g %in% arr]
-
       mer = rbind(mer,df)
 
       jet <- Sys.time()
