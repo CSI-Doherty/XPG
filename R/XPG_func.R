@@ -70,7 +70,7 @@ XPG = function(g, sp, graph, seu, ct, core, k, cat){
           df = insider(gi = c(), seu = seu, graph = graph, sp = sp, arr = arr, ct = ct, k = k, cat = cat)
           df = data.frame(t(c(df,'sp',0)))
         }else{
-          df = mclapply(g, FUN = mclapplyfunc, mc.cores = core, mc.preschedule = FALSE, seu = seu, graph = graph, sp = sp, arr = arr, ct = ct, k = k, cat = cat)
+          df = parallel::mclapply(g, FUN = mclapplyfunc, mc.cores = core, mc.preschedule = FALSE, seu = seu, graph = graph, sp = sp, arr = arr, ct = ct, k = k, cat = cat)
           print('hi')
           if (is.list(df)) df = do.call(rbind, df)
           df = cbind(df,g,rep(j,dim(df)[1]))
